@@ -150,3 +150,44 @@ do
     - Luckily, `\(\cap\)` is trivially monotonic
 
 - So FIX `\(\leq\)` MOP, and definite assignment is sound!
+
+---
+
+# So what about local functions?
+
+- At first glance, if they look like methods, why not treat them that way?
+    - But they can capture variables, which must be definitely assigned
+
+- OK, sounds like lambdas.
+    - But lambdas need captured variables at the declaration point. Local
+      functions don't need them until they're used.
+    - Lambdas also can't definitely assign variables
+
+```csharp
+void M()
+{
+    int x;
+    L(); // Assigns x, but in first pass we haven't even seen L() yet
+    Console.WriteLine(x);
+
+    void L() => x = 0;
+}
+```
+
+---
+
+# Local function algorithm
+
+- Visit local functions first and separately
+
+    - Clear set of possibly unassigned captured variables on entry
+
+    - _Record_ captured reads and writes rather than propogating to the 
+      containing method
+
+    - On 'use' of a local function, replay the recorded captured reads
+      and writes
+
+- Visit all other statements normally
+
+- Repeat until we reach a fixed point
