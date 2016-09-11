@@ -15,17 +15,27 @@
       }
       .remark-code, .remark-inline-code { font-family: 'Ubuntu Mono'; }
     </style>
-  </head>
-  <body>
-    <textarea id="source">
-
-    </textarea>
     <script src="https://gnab.github.io/remark/downloads/remark-latest.min.js">
     </script>
+    <script src="https://cdn.mathjax.org/mathjax/latest/MathJax.js?config=TeX-AMS-MML_HTMLorMML">
+    </script>
+  </head>
+  <body>
     <script>
       var slideshow = remark.create({
         sourceUrl: 'slides.md'
       });
+
+      MathJax.Hub.Config({
+        tex2jax: {
+          skipTags: ['script', 'noscript', 'style', 'textarea']
+        },
+        "HTML-CSS": {
+          fonts: ["Latin-Modern"]
+        }
+      });
+
+      MathJax.Hub.Configured();
     </script>
   </body>
 </html>
