@@ -284,6 +284,29 @@ public override BoundNode VisitIfStatement(BoundIfStatement node)
 
 - Mostly in `DataFlowPass.LocalFunctions`
 
+- Primary data structure:
+
+```csharp
+SmallDictionary<LocalFunctionSymbol, LocalFuncUsages> _localFuncVarUsages;
+ 
+private class LocalFuncUsages
+{
+    public BitVector ReadVars = BitVector.Empty;
+    public BitVector WrittenVars = BitVector.Empty;
+
+    public bool LocalFuncVisited { get; set; } = false;
+}
+```
+
+- Local function state is stored in map on each pass
+
+    - If another pass is needed for any reason, 
+      set global `stateChangedAfterUse` variable to true
+
+---
+
+# Recording local function reads and writes
+
 - Details are in `VisitLocalFunctionStatement`
     - Local function state is cleared and reads are cleared and saved
 
@@ -296,8 +319,63 @@ var oldReads = usages.ReadVars;
 usages.ReadVars = BitVector.Empty;
 ```
 
-- One useful optimization: reads/writes are only dirty if "used" before
-  set is changed
-    - i.e., if write is added to local function write set, a second pass
-      is only needed if the write has already been "replayed"
-    - Most programs take only one pass!
+- Record results and check for changes
+
+```csharp
+private bool RecordChangedVars(ref BitVector oldWrites,
+                               ref BitVector newWrites,
+                               ref BitVector oldReads,
+                               ref BitVector newReads)
+{
+    bool anyChanged = RecordCapturedChanges(ref oldWrites, ref newWrites);
+    anyChanged |= RecordCapturedChanges(ref oldReads, ref newReads);
+ 
+    return anyChanged;
+}
+```
+
+---
+
+# One pass optimization
+
+- Two optimizations:
+    1. Analyze local functions first in each block
+    2. Reads/writes are only dirty if "used" before
+       set is changed
+        - If change is made to local function state, a second pass
+          is only needed if the local function has already been "re-played"
+
+```csharp
+void M()
+{
+    int x;
+
+    L(); // Local functions have already been analyzed
+
+    x++;
+
+    void L() => x = 0; // L() has not been called yet, no second pass needed
+}
+```
+
+- Most programs take only one pass!
+
+---
+
+# Denoument
+
+- Final code change only a few hundred lines
+
+    - Mostly self-contained in `DataFlowPass.LocalFunctions`
+
+- Code heavily mirrors theoretical structure
+
+    - Possibly suggests better code structure for the future
+
+Resources:
+
+- _Modern Compiler Implementation in ML_. A. Appel
+
+- _A Unified Approach to Global Program Optimization_. G. Kildall
+
+- Compilers: Principals, Techniques, and Tools (2nd ed). Aho, Ullman, Lam, Sethi.
