@@ -159,8 +159,9 @@ do
     - But they can capture variables, which must be definitely assigned
 
 - OK, sounds like lambdas.
-    - But lambdas need captured variables at the declaration point. Local
-      functions don't need them until they're used.
+    - But lambdas need captured variables at the declaration point.
+        - Local functions don't need them until they're used.
+
     - Lambdas also can't definitely assign variables
 
 ```csharp
@@ -191,3 +192,112 @@ void M()
 - Visit all other statements normally
 
 - Repeat until we reach a fixed point
+
+- Formally, `\(gen(s)\)` for calls of local functions involves the
+  previous, separate dataflow analysis.
+
+---
+
+# Formal analysis
+
+- Can we use the same analysis?
+    - Yes, but it's more complicated
+
+- Local functions reads are cleared on every pass
+
+    - Subsequent passes can have _fewer_ unassigned captured vars
+      due to new assignments
+
+    - Thus, not monotonic
+
+    - Looks like the algorithm may have distinct 'phases', though
+
+---
+
+# Local function phases
+
+Rewriting the algorithm as three separate phases:
+
+- Visit each block
+    1. Record and replay just the local function writes until a fixed point
+        - Only writes affect other writes, so no other state inferferes
+
+    2. Record and replay just the local function reads until a fixed point
+        - No need to clear the read set on every iteration; only new writes
+          can remove "read before assigned", but writes are decided in (1)
+
+    3. Visit remaining statements (outside local functions) until fixed point.
+       Doesn't affect any of the two phases, but uses the results.
+
+---
+
+# Formal Analysis
+
+- **Writes** form a _meet-semilattice_ with meet = assign-intersection
+
+    - _Assignment-intersection_ is trivially monotonic
+
+- **Reads** form a _join-semilattice_ with join = read-union
+
+    - Same as a _meet-semilattice_, but flip the bounds
+
+    - _Read-union_ is trivially monotonic
+
+- Remaining visits are identical to original algorithm, just with previous
+  information replayed during `\(gen(s)\)` of local function calls
+    - Already proved to be a _meet-semilattice_ and monotonic
+
+- `\(\therefore\)` local function `\( FIX \leq MOP \)`!
+
+---
+
+# So how is this actually implemented?
+
+- Definite assignment, specifically, is implemented in `DataFlowPass`
+    - Mostly deals with visitation minutae and reporting
+- Actual state tracking is in `AbstractFlowPass`
+
+```csharp
+public override BoundNode VisitIfStatement(BoundIfStatement node)
+{
+    // 5.3.3.5 If statements
+    VisitCondition(node.Condition);
+    LocalState trueState = StateWhenTrue;
+    LocalState falseState = StateWhenFalse;
+    SetState(trueState);
+    VisitStatement(node.Consequence);
+    trueState = this.State;
+    SetState(falseState);
+    if (node.AlternativeOpt != null)
+    {
+        VisitStatement(node.AlternativeOpt);
+    }
+
+    IntersectWith(ref this.State, ref trueState);
+    return null;
+}
+```
+
+---
+
+# What about local functions?
+
+- Mostly in `DataFlowPass.LocalFunctions`
+
+- Details are in `VisitLocalFunctionStatement`
+    - Local function state is cleared and reads are cleared and saved
+
+```csharp
+var savedState = this.State;
+this.State = this.ReachableState();
+ 
+var usages = GetOrCreateLocalFuncUsages(localFunc.Symbol);
+var oldReads = usages.ReadVars;
+usages.ReadVars = BitVector.Empty;
+```
+
+- One useful optimization: reads/writes are only dirty if "used" before
+  set is changed
+    - i.e., if write is added to local function write set, a second pass
+      is only needed if the write has already been "replayed"
+    - Most programs take only one pass!
