@@ -235,13 +235,15 @@ Rewriting the algorithm as three separate phases:
 
 - **Writes** form a _meet-semilattice_ with meet = assign-intersection
 
-    - _Assignment-intersection_ is trivially monotonic
+    - _Assignment-intersection_ is monotonic
+        - `\(f(x) = assign \cap x \)`
 
 - **Reads** form a _join-semilattice_ with join = read-union
 
     - Same as a _meet-semilattice_, but flip the bounds
 
-    - _Read-union_ is trivially monotonic
+    - _Read-union_ is monotonic
+        - `\(f(x) = reads \cup x \)`
 
 - Remaining visits are identical to original algorithm, just with previous
   information replayed during `\(gen(s)\)` of local function calls
